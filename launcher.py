@@ -14,7 +14,10 @@ PALETTE = [
     ('blue', 'bold', 'dark blue'),
     ('highlight', 'black', 'dark blue'),
 ]
-TERM_WIDTH=args.term_width[0]
+if args.term_width and args.term_width[0]:
+  TERM_WIDTH=args.term_width[0]
+else:
+  TERM_WIDTH=None
 
 def show_or_exit(key):
     if key in ('q', 'Q', 'esc'):
@@ -83,6 +86,15 @@ async def launch(cmd, output_widget):
 
 
 
+def build_box_button(text, onclick, widget_width):
+  return BoxButton(text, on_press=onclick, width=widget_width)
+
+def calculate_widget_width(item_count):
+  if not TERM_WIDTH:
+    return None
+  return int(int(TERM_WIDTH) / item_count)
+
+
 if __name__ == '__main__':
     # CHANGEME: Change these button labels and their commands to do what you want them to say and do.
     # I use echo commands just for testing, as I don't control my media player via cli, so I don't know what you want to call. ;)
@@ -100,15 +112,21 @@ if __name__ == '__main__':
     command_output = urwid.Text('')
     onclick = lambda widget: (footer.set_text('clicked: %r' % widget), asyncio.run(launch(commands[widget.label], output_widget=command_output)))
     #launch(widget, command_output))
-    button_texts = commands.keys()
+    button_rows = []
+    #If you want all buttons on a single row, in the order they were added to the 'commands' dict, then just do:
+    # button_rows.append(commands.keys())
+    # Else just build up the rows manually with they dict keys:
+    button_rows.append(['Play', 'Stop', 'Pause'])
+    button_rows.append(['Rewind', 'Skip'])
+    button_rows.append(['Explore'])
     widget_width = None
-    if TERM_WIDTH:
-      widget_width = int(int(TERM_WIDTH) / len(button_texts))
     widget = urwid.Pile([
         header, # comment this out with a # at the beginning if you don't want a header line
-        urwid.Columns([
-            BoxButton(text, on_press=onclick, width=widget_width) for text in button_texts
-        ]),
+        *[
+            urwid.Columns(
+              [build_box_button(text, onclick, calculate_widget_width(len(button_row))) for text in button_row]
+            ) for button_row in button_rows
+        ],
         command_output, #comment this out if you don't want to output the return code and the stderr/stdout text of the commands you run
         footer, #comment this out to hide the footer
     ])
