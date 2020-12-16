@@ -27,19 +27,19 @@ This is one of the major reasons behind this update: the separation of config an
 4. Create a new layout: `cp layouts/default.txt layouts/media_controls.txt`
 5. Edit your new config and copy the contents of the commands variable from your previous install, over to the commands variable of the new config.
 6. Instead of manually calling `button_rows.append()` as in the initial script to add rows of buttons, you can now put the contents of the keys of your `commands` hash in your `layouts/media_controls.txt` file, separating the buttons with commas, one row per line.
-For example, if in your previous install you had:
-```
-button_rows.append(['Play', 'Stop', 'Pause'])
-button_rows.append(['Rewind', 'Skip'])
-button_rows.append(['Explore'])
-```
-You can now just add this to `layouts/media_controls.txt`:
-```
-play, stop, pause
-rewind, skip
-Explore
-```
-You don't need to include the entire key; just a unique part of it would suffice. It's also case-insensitive, so you don't have to worry about matching capitals.
+	For example, if in your previous install you had:
+	```
+	button_rows.append(['Play', 'Stop', 'Pause'])
+	button_rows.append(['Rewind', 'Skip'])
+	button_rows.append(['Explore'])
+	```
+	You can now just add this to `layouts/media_controls.txt`:
+	```
+	play, stop, pause
+	rewind, skip
+	Explore
+	```
+	You don't need to include the entire key; just a unique part of it would suffice. It's also case-insensitive, so you don't have to worry about matching capitals.
 7. Reference this layout file by using the proper path for `layout_file` in your config file `configs/media_controls.py`-
 8. Launch the script with:  `./launcher.py --term-width="$(tput cols)" --config-file ./configs/media_controls.py`.
 
