@@ -14,6 +14,35 @@ The new layout can be specified with `--layout-file ./layouts/media_controls.txt
 
 For a quick reference of the command line arguments: `./launcher.py --help`
 
+# How to upgrade from the initial script posted to Gist.GitHub.com?
+If you used the [initial version of this script I posted to gist.github.com a few days ago](https://gist.github.com/FiXato/14b80d612896f6d008988983f3b47eff), then you'll first want to back up your script, or clone this new version in a different location, as the launcher.py would otherwise be overwritten, and you'd lose your config.
+
+This is one of the major reasons behind this update: the separation of config and script.
+
+## Step by step instructions:
+
+1. Clone the repository: `git clone https://github.com/FiXato/tui_launcher.git`
+2. Move into the new directoyr: `cd tui_launcher`
+3. Create a new config: `cp configs/default.py configs/media_controls.py`
+4. Create a new layout: `cp layouts/default.txt layouts/media_controls.txt`
+5. Edit your new config and copy the contents of the commands variable from your previous install, over to the commands variable of the new config.
+6. Instead of manually calling `button_rows.append()` as in the initial script to add rows of buttons, you can now put the contents of the keys of your `commands` hash in your `layouts/media_controls.txt` file, separating the buttons with commas, one row per line.
+For example, if in your previous install you had:
+```
+button_rows.append(['Play', 'Stop', 'Pause'])
+button_rows.append(['Rewind', 'Skip'])
+button_rows.append(['Explore'])
+```
+You can now just add this to `layouts/media_controls.txt`:
+```
+play, stop, pause
+rewind, skip
+Explore
+```
+You don't need to include the entire key; just a unique part of it would suffice. It's also case-insensitive, so you don't have to worry about matching capitals.
+7. Reference this layout file by using the proper path for `layout_file` in your config file `configs/media_controls.py`-
+8. Launch the script with:  `./launcher.py --term-width="$(tput cols)" --config-file ./configs/media_controls.py`.
+
 # How to support:
 Want to buy me a beer? Or toss a few coins to your code-witcher for new hardware?
 I accept [PayPal donations](https://www.paypal.com/donate/?hosted_button_id=ZR6T84CGV53V2).
