@@ -40,7 +40,7 @@ This is one of the major reasons behind this update: the separation of config an
 	Explore
 	```
 	You don't need to include the entire key; just a unique part of it would suffice. It's also case-insensitive, so you don't have to worry about matching capitals.
-7. Reference this layout file by using the proper path for `layout_file` in your config file `configs/media_controls.py`-
+7. Reference this layout file by using the proper path for `layout_file` in your config file `configs/media_controls.py`.
 8. Launch the script with:  `./launcher.py --term-width="$(tput cols)" --config-file ./configs/media_controls.py`.
 
 # How to support:
