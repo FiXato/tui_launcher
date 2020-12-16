@@ -3,10 +3,7 @@
 # TUI-based launcher script by Filip H.F. "FiXato" Slagter
 #
 # Suggested way to launch so it gets the current terminal's width: `./launcher.py --term-width="$(tput cols)"`
-# Also see the help output for other available arguments: `./launcher.py --help`
-# While you could edit `layout/default.txt`, I would recommend using it as a template by copy pasting it to e.g. `configs/media_controls.py` and editing that.
-# Likewise with the default layout in `layouts/default.txt`
-# You can select this new config file with: `./launcher.py --term-width="$(tput cols)" --config-file ./configs/your-config.py`
+# See README.md (https://github.com/FiXato/tui_launcher/blob/main/README.md) for more detailed launch and usage instructions.
 #
 # Want to buy me a beer? Or toss a few coins to your code-witcher for new hardware?
 # I accept paypal donations: https://www.paypal.com/donate/?hosted_button_id=ZR6T84CGV53V2
