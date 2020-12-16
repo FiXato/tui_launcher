@@ -1,23 +1,101 @@
 #!/usr/bin/env python3
 # encoding: utf-8
-from math import floor
+# TUI-based launcher script by Filip H.F. "FiXato" Slagter
+#
+# Suggested way to launch so it gets the current terminal's width: `./launcher.py --term-width="$(tput cols)"`
+# Also see the help output for other available arguments: `./launcher.py --help`
+# While you could edit `layout/default.txt`, I would recommend using it as a template by copy pasting it to e.g. `configs/media_controls.py` and editing that.
+# Likewise with the default layout in `layouts/default.txt`
+# You can select this new config file with: `./launcher.py --term-width="$(tput cols)" --config-file ./configs/your-config.py`
+#
+# Want to buy me a beer? Or toss a few coins to your code-witcher for new hardware?
+# I accept paypal donations: https://www.paypal.com/donate/?hosted_button_id=ZR6T84CGV53V2
+#
+from os import getenv, pipe
+import logging
+logger = logging.getLogger()
+
+LOG_LEVEL = getenv('LOG_LEVEL')
+if LOG_LEVEL and hasattr(logging, LOG_LEVEL):
+  logger.setLevel(getattr(logging, LOG_LEVEL))
+from math import floor, ceil
+from pathlib import Path
+from sys import exit
+from importlib import import_module
 import argparse
 import urwid
-import asyncio
+import subprocess
+import functools
 urwid.set_encoding("utf8")
-arg_parser = argparse.ArgumentParser(description='Launch tools via buttons.')
+arg_parser = argparse.ArgumentParser(description='TUI-based Launcher that allows you to launch apps and run commands by clicking on self-defined buttons.')
+arg_parser.add_argument('--config-file', nargs=1)
 arg_parser.add_argument('--term-width', nargs=1)
+arg_parser.add_argument('--layout-file', nargs=1)
 args = arg_parser.parse_args()
-PALETTE = [
-    ('normal', '', ''),
-    ('bold', 'bold', ''),
-    ('blue', 'bold', 'dark blue'),
-    ('highlight', 'black', 'dark blue'),
-]
+
+def format_exception(message, exception):
+  return '\n\t'.join([message, str(type(exception)), str(exception.args), str(exception)])
+
+if args.config_file and args.config_file[0]:
+    config_path=Path(args.config_file[0])
+    try:
+        relative_config_path = config_path.resolve().relative_to(Path('.').resolve())
+        if relative_config_path.exists():
+            module_name = relative_config_path.with_suffix('').as_posix().replace('/', '.')
+            print(f"""Loading module from {module_name}""")
+            Config = import_module(module_name)
+        else:
+            exit(f"""Could not find config at: {relative_config_path}""")
+    except Exception as inst:
+        logger.error(format_exception(f"""Error loading config: {args.config_file[0]}""", inst))
+
+        exit("error while loading config. Perhaps the config is not relative to the current path?")
+else:
+    import configs.default as Config
+
+if args.layout_file and args.layout_file[0]:
+    Config.layout_file=Path(args.layout_file[0])
+elif hasattr(Config, 'layout_file'):
+    pass
+else:
+  Config.layout_file=Path('layout.txt')
+
+if Config.layout_file and not Config.layout_file.exists():
+    exit(f"""Config file {str(Config.layout_file)} does not exist""")
+
+
 if args.term_width and args.term_width[0]:
   TERM_WIDTH=args.term_width[0]
 else:
   TERM_WIDTH=None
+BUTTON_ROWS = []
+
+def find_command(command_key):
+    test_key = command_key.lower()
+    for key in Config.commands.keys():
+        if test_key in key.lower():
+            return key
+            return None
+
+if Config.layout_file and Config.layout_file.exists():
+    with Config.layout_file.open() as fp:
+        for line_index, line in enumerate(fp):
+            line = line.strip()
+            # Skip commented out lines
+            button_row = []
+            if line:
+              if line[0] == '#':
+                continue
+              for item in line.split(','):
+                  command_key = find_command(item.strip())
+                  if command_key:
+                      button_row.append(command_key)
+                  else:
+                      exit(f"""could not find command key: {item.strip()}""")
+            BUTTON_ROWS.append(button_row)
+
+if not BUTTON_ROWS:
+    BUTTON_ROWS.append(Config.commands.keys())
 
 def show_or_exit(key):
     if key in ('q', 'Q', 'esc'):
@@ -26,31 +104,40 @@ def show_or_exit(key):
 # Code based on https://stackoverflow.com/a/52262369 by Elias Dorneles, licensed as https://creativecommons.org/licenses/by-sa/4.0/, modified by Filip H.F. "FiXato" Slagter
 class BoxButton(urwid.WidgetWrap):
     _border_char = u'─'
-    def __init__(self, label, on_press=None, user_data=None, width=None):
+    def __init__(self, label, on_press=None, user_data=None, width=None, vertical_padding=None):
         left_decoration = u'│  '
         right_decoration = u'  │'
         if not width:
-          inner_padding_length = 0
+            inner_padding_length = 0
         else:
-          inner_padding_length = floor((width - len(label) - len(left_decoration) - len(right_decoration)) / 2)
-        inner_padding = ' ' *  inner_padding_length
-        padded_label = f"""{inner_padding}{label}{inner_padding}"""
+            half_width = (width - len(label) - len(left_decoration) - len(right_decoration)) / 2
+            inner_padding_length = [ceil(half_width), floor(half_width)]
+        if isinstance(vertical_padding, int):
+            vertical_padding = [ceil(vertical_padding / 2), floor(vertical_padding / 2)]
+        elif isinstance(vertical_padding, list) and len(vertical_padding) == 2 and isinstance(vertical_padding[0], int) and isinstance(vertical_padding[1], int):
+            pass
+        else:
+            vertical_padding = [1, 1]
+        padded_label = f"""{' ' *  inner_padding_length[0]}{label}{' ' *  inner_padding_length[1]}"""
         padding_size = 2
         border = self._border_char * (len(padded_label) + padding_size * 2)
         cursor_position = len(border) + padding_size
 
-        self.top = u'┌' + border + u'┐\n'
-        self.blank = f"""{left_decoration}{' ' * len(padded_label)}{right_decoration}\n"""
-        self.middle = f"""{left_decoration}{padded_label}{right_decoration}\n"""
+        self.top = u'┌' + border + u'┐'
+        self.blank = f"""{left_decoration}{' ' * len(padded_label)}{right_decoration}"""
+        self.middle = f"""{left_decoration}{padded_label}{right_decoration}"""
         self.bottom = u'└' + border + u'┘'
 
-        self.widget = urwid.Pile([
-            urwid.Text(self.top[:-1]),
-            urwid.Text(self.blank[:-1]),
-            urwid.Text(self.middle[:-1]),
-            urwid.Text(self.blank[:-1]),
-            urwid.Text(self.bottom),
-        ])
+        button_lines = []
+        button_lines.append(self.top)
+        for _ in range(vertical_padding[0]):
+            button_lines.append(self.blank)
+        button_lines.append(self.middle)
+        for _ in range(vertical_padding[1]):
+            button_lines.append(self.blank)
+        button_lines.append(self.bottom)
+
+        self.widget = urwid.Pile([urwid.Text(button_line) for button_line in button_lines])
 
         self.widget = urwid.AttrMap(self.widget, '', 'highlight')
 
@@ -69,23 +156,6 @@ class BoxButton(urwid.WidgetWrap):
     def mouse_event(self, *args, **kw):
         return self._hidden_btn.mouse_event(*args, **kw)
 
-async def launch(cmd, output_widget):
-    proc = await asyncio.create_subprocess_shell(
-        cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE)
-
-    stdout, stderr = await proc.communicate()
-
-    output = f'[{cmd!r} exited with {proc.returncode}]'
-    if stdout:
-        output = f'[stdout]\n{stdout.decode()}'
-    if stderr:
-        output = f'[stderr]\n{stderr.decode()}'
-    output_widget.set_text(output)
-
-
-
 def build_box_button(text, onclick, widget_width):
   return BoxButton(text, on_press=onclick, width=widget_width)
 
@@ -94,42 +164,53 @@ def calculate_widget_width(item_count):
     return None
   return int(int(TERM_WIDTH) / item_count)
 
+def append_output_widget(widget, label, input_text):
+    lines = [line.strip() for line in widget.text.splitlines() if line.strip()]
+    input_lines = input_text.decode('utf-8').splitlines()
+    input_lines = [f"""[{label}] {line.strip()}""" for line in input_lines if line.strip()]
+    new_text = '\n'.join((lines + input_lines)[-10:])
+    widget.set_text(new_text)
+
+def handle_click(status_widget, command_output_widget, clicked_widget):
+    cmd = Config.commands[clicked_widget.label]
+    status_widget.set_text(f"""Last clicked: {clicked_widget.label}""")
+    try:
+        dummy_stdin, _ = pipe()
+        callback = functools.partial(append_output_widget, command_output_widget, clicked_widget.label)
+        stdout = Config.loop.watch_pipe(callback)
+        stderr = Config.loop.watch_pipe(callback)
+        use_shell = (True if isinstance(cmd, str) else False)
+        process = subprocess.Popen(cmd, stdin=dummy_stdin, stdout=stdout, stderr=stderr, shell=use_shell)
+    except Exception as inst:
+        logger.error(format_exception(f"""Error handling click:""", inst))
 
 if __name__ == '__main__':
     # CHANGEME: Change these button labels and their commands to do what you want them to say and do.
     # I use echo commands just for testing, as I don't control my media player via cli, so I don't know what you want to call. ;)
     # just replace the "echo "playing" >> commands.log" part between the single quotes with the play command you use.
-    commands = {
-      'Play': 'echo "playing" >> commands.log',
-      'Stop': 'echo "stopping" >> commands.log',
-      'Pause': 'echo "pausing" >> commands.log',
-      'Skip': 'echo "Skipping to next track" >> commands.log',
-      'Rewind': 'echo "Rewinding to start of track" >> commands.log',
-      'Explore': 'explorer.exe',
-    }
-    header = urwid.Text('TUI launcher')
-    footer = urwid.Text('Proof of Concept by Filip H.F. "FiXato" Slagter')
-    command_output = urwid.Text('')
-    onclick = lambda widget: (footer.set_text('clicked: %r' % widget), asyncio.run(launch(commands[widget.label], output_widget=command_output)))
-    #launch(widget, command_output))
-    button_rows = []
-    #If you want all buttons on a single row, in the order they were added to the 'commands' dict, then just do:
-    # button_rows.append(commands.keys())
-    # Else just build up the rows manually with they dict keys:
-    button_rows.append(['Play', 'Stop', 'Pause'])
-    button_rows.append(['Rewind', 'Skip'])
-    button_rows.append(['Explore'])
-    widget_width = None
-    widget = urwid.Pile([
-        header, # comment this out with a # at the beginning if you don't want a header line
-        *[
-            urwid.Columns(
-              [build_box_button(text, onclick, calculate_widget_width(len(button_row))) for text in button_row]
-            ) for button_row in button_rows
-        ],
-        command_output, #comment this out if you don't want to output the return code and the stderr/stdout text of the commands you run
-        footer, #comment this out to hide the footer
-    ])
+    header = urwid.AttrMap(urwid.Text(Config.HEADER_TEXT), 'header')
+    footer = urwid.AttrMap(urwid.Text(Config.FOOTER_TEXT), 'footer')
+    status_widget = urwid.AttrMap(urwid.Text(''), 'status_line')
+    command_output = urwid.AttrMap(urwid.Text(''), 'command_output')
+    onclick = lambda widget: (handle_click(status_widget=status_widget.original_widget, command_output_widget=command_output.original_widget, clicked_widget=widget))
+    displayed_widgets = []
+
+    if not Config.HIDE_HEADER:
+        displayed_widgets.append(header)
+
+    for button_row in BUTTON_ROWS:
+        displayed_widgets.append(urwid.Columns([build_box_button(text, onclick, calculate_widget_width(len(button_row))) for text in button_row]))
+
+    if not Config.HIDE_STATUS_LINE:
+        displayed_widgets.append(status_widget)
+
+    if not Config.HIDE_COMMAND_OUTPUT:
+        displayed_widgets.append(command_output)
+
+    if not Config.HIDE_FOOTER:
+        displayed_widgets.append(footer)
+
+    widget = urwid.Pile(displayed_widgets)
     widget = urwid.Filler(widget, 'top')
-    loop = urwid.MainLoop(widget, PALETTE, unhandled_input=show_or_exit)
-    loop.run()
+    Config.loop = urwid.MainLoop(widget, Config.PALETTE, unhandled_input=show_or_exit)
+    Config.loop.run()

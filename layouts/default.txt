@@ -1,0 +1,16 @@
+# Example, default, layout file
+# Each line represents a row of buttons
+# Each button is separated by a comma (whitespace between items is ignored)
+# The item keywords are matched case-insensitively on the keys from commands in the config file.
+# The first match is used. The following line will for instance add the buttons '▶ Play', '⏸ Pause', and '⏹ Stop', in that order:
+play,pause,stop
+rewind, skip
+curl, Explore
+# Comments can be added with a # character as the first non-whitespace character of the line
+# Extra, empty, rows can also added by leaving the lines empty:
+
+
+
+
+
+FiXato's View

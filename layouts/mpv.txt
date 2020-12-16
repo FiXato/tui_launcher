@@ -1,0 +1,4 @@
+# An example showing how you can use various parts of the commands key as button references. 'dr2c' and 'Deathroad' both reference 'Deathroad to Canada aka DR2C', while 'nemesis', 'Nemesis 2' and 'boss' all reference 'Nemesis 2 boss battle'
+dr2c,nemesis
+Deathroad
+Nemesis 2,boss
