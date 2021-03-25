@@ -30,6 +30,7 @@ arg_parser.add_argument('--term-width', nargs=1)
 arg_parser.add_argument('--layout-file', nargs=1)
 arg_parser.add_argument('--header-text', nargs=1)
 arg_parser.add_argument('--footer-text', nargs=1)
+arg_parser.add_argument('--header-cmd', nargs=1)
 args = arg_parser.parse_args()
 
 def format_exception(message, exception):
@@ -170,7 +171,12 @@ def append_output_widget(widget, label, input_text):
     new_text = '\n'.join((lines + input_lines)[-10:])
     widget.set_text(new_text)
 
-def handle_click(status_widget, command_output_widget, clicked_widget):
+def refresh_widget(widget, input_text):
+    input_lines = input_text.decode('utf-8').splitlines()
+    new_text = '\n'.join((input_lines)[-10:])
+    widget.set_text(new_text)
+
+def handle_click(status_widget, command_output_widget, clicked_widget, header_widget=None):
     cmd = Config.commands[clicked_widget.label]
     status_widget.set_text(f"""Last clicked: {clicked_widget.label}""")
     try:
@@ -179,6 +185,13 @@ def handle_click(status_widget, command_output_widget, clicked_widget):
         stdout = Config.loop.watch_pipe(callback)
         stderr = Config.loop.watch_pipe(callback)
         use_shell = (True if isinstance(cmd, str) else False)
+        if Config.header_cmd:
+          dummy_stdin_header, _ = pipe()
+          callback_header = functools.partial(refresh_widget, header_widget.original_widget)
+          stdout_header = Config.loop.watch_pipe(callback_header)
+          stderr_header = Config.loop.watch_pipe(callback_header)
+
+          header_process = subprocess.Popen(Config.header_cmd, stdin=dummy_stdin_header, stdout=stdout_header, stderr=stderr_header, shell=True)
         process = subprocess.Popen(cmd, stdin=dummy_stdin, stdout=stdout, stderr=stderr, shell=use_shell)
     except Exception as inst:
         logger.error(format_exception(f"""Error handling click:""", inst))
@@ -200,7 +213,7 @@ if __name__ == '__main__':
     footer = urwid.AttrMap(urwid.Text(footer_text), 'footer')
     status_widget = urwid.AttrMap(urwid.Text(''), 'status_line')
     command_output = urwid.AttrMap(urwid.Text(''), 'command_output')
-    onclick = lambda widget: (handle_click(status_widget=status_widget.original_widget, command_output_widget=command_output.original_widget, clicked_widget=widget))
+    onclick = lambda widget: (handle_click(status_widget=status_widget.original_widget, command_output_widget=command_output.original_widget, clicked_widget=widget, header_widget=header))
     displayed_widgets = []
 
     if args.header_text or not Config.HIDE_HEADER:
