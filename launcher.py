@@ -28,6 +28,8 @@ arg_parser = argparse.ArgumentParser(description='TUI-based Launcher that allows
 arg_parser.add_argument('--config-file', nargs=1)
 arg_parser.add_argument('--term-width', nargs=1)
 arg_parser.add_argument('--layout-file', nargs=1)
+arg_parser.add_argument('--header-text', nargs=1)
+arg_parser.add_argument('--footer-text', nargs=1)
 args = arg_parser.parse_args()
 
 def format_exception(message, exception):
@@ -185,8 +187,17 @@ if __name__ == '__main__':
     # CHANGEME: Change these button labels and their commands to do what you want them to say and do.
     # I use echo commands just for testing, as I don't control my media player via cli, so I don't know what you want to call. ;)
     # just replace the "echo "playing" >> commands.log" part between the single quotes with the play command you use.
-    header = urwid.AttrMap(urwid.Text(Config.HEADER_TEXT), 'header')
-    footer = urwid.AttrMap(urwid.Text(Config.FOOTER_TEXT), 'footer')
+    if args.header_text and args.header_text[0]:
+      header_text = args.header_text[0]
+    else:
+      header_text = Config.HEADER_TEXT
+
+    if args.footer_text and args.footer_text[0]:
+      footer_text = args.footer_text[0]
+    else:
+      footer_text = Config.FOOTER_TEXT
+    header = urwid.AttrMap(urwid.Text(header_text), 'header')
+    footer = urwid.AttrMap(urwid.Text(footer_text), 'footer')
     status_widget = urwid.AttrMap(urwid.Text(''), 'status_line')
     command_output = urwid.AttrMap(urwid.Text(''), 'command_output')
     onclick = lambda widget: (handle_click(status_widget=status_widget.original_widget, command_output_widget=command_output.original_widget, clicked_widget=widget))
