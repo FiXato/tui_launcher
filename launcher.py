@@ -203,7 +203,7 @@ if __name__ == '__main__':
     onclick = lambda widget: (handle_click(status_widget=status_widget.original_widget, command_output_widget=command_output.original_widget, clicked_widget=widget))
     displayed_widgets = []
 
-    if not Config.HIDE_HEADER:
+    if args.header_text or not Config.HIDE_HEADER:
         displayed_widgets.append(header)
 
     for button_row in BUTTON_ROWS:
@@ -215,7 +215,7 @@ if __name__ == '__main__':
     if not Config.HIDE_COMMAND_OUTPUT:
         displayed_widgets.append(command_output)
 
-    if not Config.HIDE_FOOTER:
+    if args.footer_text or not Config.HIDE_FOOTER:
         displayed_widgets.append(footer)
 
     widget = urwid.Pile(displayed_widgets)
