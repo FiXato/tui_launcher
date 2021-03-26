@@ -1,0 +1,9 @@
+date_dynamic_label, lastfm_dynamic_label
+Get current datetime, Get recent scrobbles
+FiXato's most recent toots
+
+{last_toot_header}last_toot_header_dynamic_label
+last_toot_dynamic_label
+
+{item_header}tail_header_dynamic_label
+tail_dynamic_label

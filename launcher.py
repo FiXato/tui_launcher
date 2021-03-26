@@ -23,6 +23,7 @@ import argparse
 import urwid
 import subprocess
 import functools
+import re
 urwid.set_encoding("utf8")
 arg_parser = argparse.ArgumentParser(description='TUI-based Launcher that allows you to launch apps and run commands by clicking on self-defined buttons.')
 arg_parser.add_argument('--config-file', nargs=1)
@@ -62,6 +63,8 @@ else:
 if Config.layout_file and not Config.layout_file.exists():
     exit(f"""Config file {str(Config.layout_file)} does not exist""")
 
+if not hasattr(Config, 'dynamic_labels'):
+  Config.dynamic_labels={}
 
 if args.term_width and args.term_width[0]:
   TERM_WIDTH=args.term_width[0]
@@ -70,6 +73,7 @@ else:
 BUTTON_ROWS = []
 
 def find_command(command_key):
+    palette_formatter, command_key = re.search(r'(?:\{([^}]+)\})?(.+)', command_key).groups()
     test_key = command_key.lower()
     for key in Config.commands.keys():
         if test_key in key.lower():
@@ -88,7 +92,7 @@ if Config.layout_file and Config.layout_file.exists():
               for item in line.split(','):
                   command_key = find_command(item.strip())
                   if command_key:
-                      button_row.append(command_key)
+                      button_row.append(item.strip())
                   else:
                       exit(f"""could not find command key: {item.strip()}""")
             BUTTON_ROWS.append(button_row)
@@ -170,6 +174,11 @@ def append_output_widget(widget, label, input_text):
     new_text = '\n'.join((lines + input_lines)[-10:])
     widget.set_text(new_text)
 
+def refresh_widget(widget, input_text):
+    input_lines = input_text.decode('utf-8').splitlines()
+    new_text = '\n'.join((input_lines)[-10:])
+    widget.set_text(new_text)
+
 def handle_click(status_widget, command_output_widget, clicked_widget):
     cmd = Config.commands[clicked_widget.label]
     status_widget.set_text(f"""Last clicked: {clicked_widget.label}""")
@@ -182,6 +191,20 @@ def handle_click(status_widget, command_output_widget, clicked_widget):
         process = subprocess.Popen(cmd, stdin=dummy_stdin, stdout=stdout, stderr=stderr, shell=use_shell)
     except Exception as inst:
         logger.error(format_exception(f"""Error handling click:""", inst))
+
+def create_column_item(text, onclick, item_count_in_button_row):
+    print(text)
+    palette_formatter, text = re.search(r'(?:\{([^}]+)\})?(.+)', text).groups()
+    print(palette_formatter, text, "\n")
+    if not palette_formatter:
+      palette_formatter = 'dynamic_label'
+    if text.endswith('_dynamic_label'):
+        label_widget = urwid.AttrMap(urwid.Text(text), palette_formatter)
+        cmd_key = find_command(text)
+        cmd = Config.dynamic_labels[text] = {'cmd': Config.commands[cmd_key] if cmd_key else None, 'widget': label_widget, 'label_text': text}
+        return label_widget
+
+    return build_box_button(find_command(text), onclick, calculate_widget_width(item_count_in_button_row))
 
 if __name__ == '__main__':
     # CHANGEME: Change these button labels and their commands to do what you want them to say and do.
@@ -200,14 +223,21 @@ if __name__ == '__main__':
     footer = urwid.AttrMap(urwid.Text(footer_text), 'footer')
     status_widget = urwid.AttrMap(urwid.Text(''), 'status_line')
     command_output = urwid.AttrMap(urwid.Text(''), 'command_output')
-    onclick = lambda widget: (handle_click(status_widget=status_widget.original_widget, command_output_widget=command_output.original_widget, clicked_widget=widget))
+    onclick = lambda widget: (
+      handle_click(
+        status_widget=status_widget.original_widget,
+        command_output_widget=command_output.original_widget,
+        clicked_widget=widget
+      )
+    )
     displayed_widgets = []
 
     if args.header_text or not Config.HIDE_HEADER:
         displayed_widgets.append(header)
 
     for button_row in BUTTON_ROWS:
-        displayed_widgets.append(urwid.Columns([build_box_button(text, onclick, calculate_widget_width(len(button_row))) for text in button_row]))
+        displayed_widgets.append(
+          urwid.Columns([create_column_item(text, onclick, len(button_row)) for text in button_row]))
 
     if not Config.HIDE_STATUS_LINE:
         displayed_widgets.append(status_widget)
@@ -221,4 +251,15 @@ if __name__ == '__main__':
     widget = urwid.Pile(displayed_widgets)
     widget = urwid.Filler(widget, 'top')
     Config.loop = urwid.MainLoop(widget, Config.PALETTE, unhandled_input=show_or_exit)
+    for label_key, dynamic_label in Config.dynamic_labels.items():
+        cmd = dynamic_label.get('cmd')
+        try:
+            dummy_stdin, _ = pipe()
+            callback = functools.partial(refresh_widget, dynamic_label['widget'].original_widget)
+            stdout = Config.loop.watch_pipe(callback)
+            stderr = Config.loop.watch_pipe(callback)
+            use_shell = (True if isinstance(cmd, str) else False)
+            process = subprocess.Popen(cmd, stdin=dummy_stdin, stdout=stdout, stderr=stderr, shell=use_shell)
+        except Exception as inst:
+            logger.error(format_exception(f"""Error handling dynamic label creation:""", inst))
     Config.loop.run()
