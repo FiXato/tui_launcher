@@ -7,10 +7,11 @@ from pathlib import Path
 # The second is foreground formatting
 # The third is background formatting
 PALETTE = [
-    ('normal', '', ''),
     ('bold', 'bold', ''),
     ('blue', 'bold', 'dark blue'),
-    ('highlight', 'black', 'dark blue'),
+    ('button', 'dark green', ''),
+    ('activated_button', 'italics,yellow', ''),
+    ('focused_button', 'yellow', ''),
     ('header', 'dark green,bold,underline', 'black'),
     ('status_line', 'light gray', 'black'),
     ('command_output', 'dark green', 'black'),

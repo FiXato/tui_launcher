@@ -24,6 +24,7 @@ import urwid
 import subprocess
 import functools
 import re
+#from IPython import embed
 urwid.set_encoding("utf8")
 arg_parser = argparse.ArgumentParser(description='TUI-based Launcher that allows you to launch apps and run commands by clicking on self-defined buttons.')
 arg_parser.add_argument('--config-file', nargs=1)
@@ -32,6 +33,11 @@ arg_parser.add_argument('--layout-file', nargs=1)
 arg_parser.add_argument('--header-text', nargs=1)
 arg_parser.add_argument('--footer-text', nargs=1)
 args = arg_parser.parse_args()
+warnings = []
+
+def warn(message):
+    logger.warning(message)
+    warnings.append(message)
 
 def format_exception(message, exception):
   return '\n\t'.join([message, str(type(exception)), str(exception.args), str(exception)])
@@ -42,7 +48,7 @@ if args.config_file and args.config_file[0]:
         relative_config_path = config_path.resolve().relative_to(Path('.').resolve())
         if relative_config_path.exists():
             module_name = relative_config_path.with_suffix('').as_posix().replace('/', '.')
-            print(f"""Loading module from {module_name}""")
+            #print(f"""Loading module from {module_name}""")
             Config = import_module(module_name)
         else:
             exit(f"""Could not find config at: {relative_config_path}""")
@@ -52,6 +58,17 @@ if args.config_file and args.config_file[0]:
         exit("error while loading config. Perhaps the config is not relative to the current path?")
 else:
     import configs.default as Config
+
+Config.active_widget = None
+# backwards compatibility hack as I want to rename the 'highlight' palette key to 'focused_button'
+Config.palette_keys = [key for (key, fg, bg) in Config.PALETTE]
+if 'focused_button' not in Config.palette_keys:
+    if 'highlight' not in Config.palette_keys:
+        warn("PALETTE in your config is missing a 'focused_button' markup item")
+    else:
+        warn("PALETTE in your config is missing a 'focused_button' markup item, but has the deprecated 'highlight' item; we'll use that, but please update your config to rename 'highlight' to 'focused_button'")
+        highlight_item = [item for item in Config.PALETTE if item[0] == 'highlight'][0]
+        Config.PALETTE.append(('focused_button', highlight_item[1], highlight_item[2]))
 
 if args.layout_file and args.layout_file[0]:
     Config.layout_file=Path(args.layout_file[0])
@@ -142,10 +159,11 @@ class BoxButton(urwid.WidgetWrap):
 
         self.widget = urwid.Pile([urwid.Text(button_line) for button_line in button_lines])
 
-        self.widget = urwid.AttrMap(self.widget, '', 'highlight')
+        self.widget = apply_markup(self.widget, 'button', 'focused_button')
 
         # here is a lil hack: use a hidden button for evt handling
         self._hidden_btn = urwid.Button('%s' % label, on_press, user_data)
+        self._hidden_btn.wgt = self.widget
 
         super(BoxButton, self).__init__(self.widget)
         self.original_label = label
@@ -182,6 +200,14 @@ def refresh_widget(widget, input_text):
 def handle_click(status_widget, command_output_widget, clicked_widget):
     cmd = Config.commands[clicked_widget.label]
     status_widget.set_text(f"""Last clicked: {clicked_widget.label}""")
+    if 'activated_button' in Config.palette_keys:
+        if Config.active_widget:
+            Config.active_widget.wgt.set_focus_map({None: 'focused_button'})
+        clicked_widget.wgt.set_focus_map({None: 'activated_button'})
+    else:
+        warn("'activated_button' is missing from the PALETTE in your config.")
+    Config.active_widget = clicked_widget
+
     try:
         dummy_stdin, _ = pipe()
         callback = functools.partial(append_output_widget, command_output_widget, clicked_widget.label)
@@ -193,18 +219,25 @@ def handle_click(status_widget, command_output_widget, clicked_widget):
         logger.error(format_exception(f"""Error handling click:""", inst))
 
 def create_column_item(text, onclick, item_count_in_button_row):
-    print(text)
+    #print(text)
     palette_formatter, text = re.search(r'(?:\{([^}]+)\})?(.+)', text).groups()
-    print(palette_formatter, text, "\n")
+    #print(palette_formatter, text, "\n")
     if not palette_formatter:
       palette_formatter = 'dynamic_label'
     if text.endswith('_dynamic_label'):
-        label_widget = urwid.AttrMap(urwid.Text(text), palette_formatter)
+        label_widget = apply_markup(urwid.Text(text), palette_formatter)
         cmd_key = find_command(text)
         cmd = Config.dynamic_labels[text] = {'cmd': Config.commands[cmd_key] if cmd_key else None, 'widget': label_widget, 'label_text': text}
         return label_widget
 
     return build_box_button(find_command(text), onclick, calculate_widget_width(item_count_in_button_row))
+
+def apply_markup(widget, markup_name, focus_markup_name=None):
+    if not markup_name in Config.palette_keys:
+        warn(f"""'{markup_name}' is missing from the PALETTE in your config.""")
+    if focus_markup_name and (focus_markup_name not in Config.palette_keys):
+        warn(f"""'{focus_markup_name}' is missing from the PALETTE in your config.""")
+    return urwid.AttrMap(widget, markup_name, focus_markup_name)
 
 if __name__ == '__main__':
     # CHANGEME: Change these button labels and their commands to do what you want them to say and do.
@@ -219,10 +252,10 @@ if __name__ == '__main__':
       footer_text = args.footer_text[0]
     else:
       footer_text = Config.FOOTER_TEXT
-    header = urwid.AttrMap(urwid.Text(header_text), 'header')
-    footer = urwid.AttrMap(urwid.Text(footer_text), 'footer')
-    status_widget = urwid.AttrMap(urwid.Text(''), 'status_line')
-    command_output = urwid.AttrMap(urwid.Text(''), 'command_output')
+    header = apply_markup(urwid.Text(header_text), 'header')
+    footer = apply_markup(urwid.Text(footer_text), 'footer')
+    status_widget = apply_markup(urwid.Text(''), 'status_line')
+    command_output = apply_markup(urwid.Text(''), 'command_output')
     onclick = lambda widget: (
       handle_click(
         status_widget=status_widget.original_widget,
@@ -263,3 +296,7 @@ if __name__ == '__main__':
         except Exception as inst:
             logger.error(format_exception(f"""Error handling dynamic label creation:""", inst))
     Config.loop.run()
+    if warnings:
+        print("Warnings during execution:")
+        for warning in warnings:
+            print(' - ' + str(warning))
