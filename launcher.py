@@ -14,16 +14,18 @@ logger = logging.getLogger()
 
 LOG_LEVEL = getenv('LOG_LEVEL')
 if LOG_LEVEL and hasattr(logging, LOG_LEVEL):
-  logger.setLevel(getattr(logging, LOG_LEVEL))
+    logger.setLevel(getattr(logging, LOG_LEVEL))
 from math import floor, ceil
 from pathlib import Path
 from sys import exit
 from importlib import import_module
+from os import environ as ENV
 import argparse
 import urwid
 import subprocess
 import functools
 import re
+import unicodedata
 #from IPython import embed
 urwid.set_encoding("utf8")
 arg_parser = argparse.ArgumentParser(description='TUI-based Launcher that allows you to launch apps and run commands by clicking on self-defined buttons.')
@@ -35,13 +37,22 @@ arg_parser.add_argument('--footer-text', nargs=1)
 args = arg_parser.parse_args()
 warnings = []
 
-def warn(message):
+def warn(*message):
     logger.warning(message)
     warnings.append(message)
+
+def error(*message):
+    logger.error(message)
+    warnings.append(f"""!! ERROR !!: {message}""")
+
+def debug(*message):
+    if 'DEBUG' in ENV and ENV['DEBUG']:
+        warn([*message])
 
 def format_exception(message, exception):
   return '\n\t'.join([message, str(type(exception)), str(exception.args), str(exception)])
 
+config_path = Path('default.py')
 if args.config_file and args.config_file[0]:
     config_path=Path(args.config_file[0])
     try:
@@ -53,7 +64,7 @@ if args.config_file and args.config_file[0]:
         else:
             exit(f"""Could not find config at: {relative_config_path}""")
     except Exception as inst:
-        logger.error(format_exception(f"""Error loading config: {args.config_file[0]}""", inst))
+        error(format_exception(f"""Error loading config: {args.config_file[0]}""", inst))
 
         exit("error while loading config. Perhaps the config is not relative to the current path?")
 else:
@@ -121,41 +132,78 @@ def show_or_exit(key):
     if key in ('q', 'Q', 'esc'):
         raise urwid.ExitMainLoop()
 
+class Borders():
+    def __init__(self,):
+        default_border_config = {
+            'top_vertical_padding_character': ' ',
+            'bottom_vertical_padding_character': ' ',
+            'middle_padding_left_character': ' ',
+            'middle_padding_right_character': ' ',
+            'top_left': '╭',
+            'top_right': '╮',
+            'top_center': '━',
+            'middle_left': '│',
+            'middle_right': '│',
+            'bottom_left': '╰',
+            'bottom_right': '╯',
+            'bottom_center': '━',
+        }
+        for key, value in default_border_config.items():
+            setattr(self, key, (Config.BORDERS[key] if Config and 'BORDERS' in Config.__dict__ and key in Config.BORDERS else value))
+            debug([key, getattr(self, key)])
+
+    def top(self, center_width):
+        return self.top_left + (self.top_center * center_width) + self.top_right
+
+    def bottom(self, center_width):
+        return self.bottom_left + (self.bottom_center * center_width) + self.bottom_right
+
+    def top_vertical_padding(self, center_width):
+        return self.middle_left + (self.top_vertical_padding_character * center_width) + self.middle_right
+
+    def bottom_vertical_padding(self, center_width):
+        return self.middle_left + (self.bottom_vertical_padding_character * center_width) + self.middle_right
+
 # Code based on https://stackoverflow.com/a/52262369 by Elias Dorneles, licensed as https://creativecommons.org/licenses/by-sa/4.0/, modified by Filip H.F. "FiXato" Slagter
 class BoxButton(urwid.WidgetWrap):
-    _border_char = u'─'
-    def __init__(self, label, on_press=None, user_data=None, width=None, vertical_padding=None):
-        left_decoration = u'│  '
-        right_decoration = u'  │'
+
+    def __init__(self, label, on_press=None, user_data=None, width=None, vertical_padding=None, horizontal_padding=None, alignment=None):
+        borders = Borders()
+        number_of_wide_chars = len([char for char in list(label) if unicodedata.east_asian_width(char) == 'W'])
+        if horizontal_padding == None:
+            horizontal_padding = 'auto'
         if not width:
-            inner_padding_length = 0
-        else:
-            half_width = (width - len(label) - len(left_decoration) - len(right_decoration)) / 2
+            horizontal_padding = [0, 0]
+        if horizontal_padding == 'auto':
+            label_length = len(label)
+            # Emoji tend to be wide characters, which screw up the padding and amount of border characters. A suggestion from Joe Ferndz at https://stackoverflow.com/a/63473262 fixes it for plain emoji, but compound ones such as a country flag (e.g.: 🇳🇱) still fail. Should have a look at counting graphemes instead perhaps (https://stackoverflow.com/questions/43146528/how-to-extract-all-the-emojis-from-text)
+            label_length += number_of_wide_chars
+            debug(label, 'label len', len(label), 'number_of_wide_chars', number_of_wide_chars, 'total label len', label_length)
+            half_width = (width - label_length - len(borders.middle_left) - len(borders.middle_right)) / 2
             inner_padding_length = [ceil(half_width), floor(half_width)]
+        else:
+            inner_padding_length = horizontal_padding
+
         if isinstance(vertical_padding, int):
-            vertical_padding = [ceil(vertical_padding / 2), floor(vertical_padding / 2)]
+            vertical_padding = [vertical_padding, vertical_padding]
         elif isinstance(vertical_padding, list) and len(vertical_padding) == 2 and isinstance(vertical_padding[0], int) and isinstance(vertical_padding[1], int):
             pass
         else:
             vertical_padding = [1, 1]
-        padded_label = f"""{' ' *  inner_padding_length[0]}{label}{' ' *  inner_padding_length[1]}"""
-        padding_size = 2
-        border = self._border_char * (len(padded_label) + padding_size * 2)
-        cursor_position = len(border) + padding_size
-
-        self.top = u'┌' + border + u'┐'
-        self.blank = f"""{left_decoration}{' ' * len(padded_label)}{right_decoration}"""
-        self.middle = f"""{left_decoration}{padded_label}{right_decoration}"""
-        self.bottom = u'└' + border + u'┘'
+        padded_label = f"""{borders.middle_padding_left_character * inner_padding_length[0]}{label}{borders.middle_padding_right_character * inner_padding_length[1]}"""
+        #cursor_position = len(border) + padding_size
 
         button_lines = []
-        button_lines.append(self.top)
+        button_width = len(borders.middle_left + padded_label + borders.middle_right)
+        center_width = len(padded_label) + number_of_wide_chars
+        debug('padded label len:', len(padded_label), 'button width:', button_width, 'max widget width:', width, 'inner pad len', inner_padding_length, 'center_width', center_width, 'nr of wide chars:', number_of_wide_chars)
+        button_lines.append(borders.top(center_width))
         for _ in range(vertical_padding[0]):
-            button_lines.append(self.blank)
-        button_lines.append(self.middle)
+            button_lines.append(borders.top_vertical_padding(center_width))
+        button_lines.append(borders.middle_left + padded_label + borders.middle_right)
         for _ in range(vertical_padding[1]):
-            button_lines.append(self.blank)
-        button_lines.append(self.bottom)
+            button_lines.append(borders.bottom_vertical_padding(center_width))
+        button_lines.append(borders.bottom(center_width))
 
         self.widget = urwid.Pile([urwid.Text(button_line) for button_line in button_lines])
 
@@ -178,12 +226,35 @@ class BoxButton(urwid.WidgetWrap):
         return self._hidden_btn.mouse_event(*args, **kw)
 
 def build_box_button(text, onclick, widget_width):
-  return BoxButton(text, on_press=onclick, width=widget_width)
+    default_vertical_padding = [0, 0]
+    default_horizontal_padding = 'auto'
+    if 'VERTICAL_PADDING' not in Config.__dict__:
+        warn(f"""'VERTICAL_PADDING' not specified in your config. Defaulting to {repr(default_vertical_padding)}. To remove this warning, add the following to your {config_path}:\nVERTICAL_PADDING = {repr(default_vertical_padding)} # first number is the amount of lines to pad at the top of the button, second number is amount at the bottom""")
+        Config.VERTICAL_PADDING = default_vertical_padding
 
-def calculate_widget_width(item_count):
+    if 'HORIZONTAL_PADDING' not in Config.__dict__:
+        warn(f"""'HORIZONTAL_PADDING' not specified in your config. Defaulting to {repr(default_horizontal_padding)}. To remove this warning, add the following to your {config_path}:\nHORIZONTAL_PADDING = {repr(default_horizontal_padding)} # How much padding do you want to the left and right of your button label? Set to: 'auto' to equally distribute across the full width, 0 or False (without quotes) for a compact view without padding, or a pair of integers to define the left and right amount of padding (e.g. [5, 2] for 5 padding on the left and 2 on the right)""")
+        Config.HORIZONTAL_PADDING = default_horizontal_padding
+
+    if isinstance(Config.HORIZONTAL_PADDING, int):
+        Config.HORIZONTAL_PADDING = [Config.HORIZONTAL_PADDING, Config.HORIZONTAL_PADDING]
+    elif Config.HORIZONTAL_PADDING == 'auto' or (isinstance(Config.HORIZONTAL_PADDING, list) and len(Config.HORIZONTAL_PADDING) == 2 and isinstance(Config.HORIZONTAL_PADDING[0], int) and isinstance(Config.HORIZONTAL_PADDING[1], int)):
+        pass
+    else:
+        warn(f"""HORIZONTAL_PADDING ({repr(Config.HORIZONTAL_PADDING)}) is not a valid value. Using default of {repr(default_horizontal_padding)}. Please update your {config_path} config:\nHORIZONTAL_PADDING = {repr(default_horizontal_padding)}""")
+        Config.HORIZONTAL_PADDING = default_horizontal_padding
+
+    return BoxButton(text, on_press=onclick, width=widget_width, vertical_padding=Config.VERTICAL_PADDING, horizontal_padding=Config.HORIZONTAL_PADDING)
+
+def calculate_widget_width(index, item_count):
   if not TERM_WIDTH:
     return None
-  return int(int(TERM_WIDTH) / item_count)
+  width = int(TERM_WIDTH) / (1.0 * item_count)
+
+  if index == 0: #FIXME: This should be ceil, but with 3 items it's still breaking the layout with HORIZONTAL_PADDING='auto'...
+      return floor(width)
+  else:
+      return floor(width)
 
 def append_output_widget(widget, label, input_text):
     lines = [line.strip() for line in widget.text.splitlines() if line.strip()]
@@ -218,7 +289,7 @@ def handle_click(status_widget, command_output_widget, clicked_widget):
     except Exception as inst:
         logger.error(format_exception(f"""Error handling click:""", inst))
 
-def create_column_item(text, onclick, item_count_in_button_row):
+def create_column_item(text, onclick, widget_width):
     #print(text)
     palette_formatter, text = re.search(r'(?:\{([^}]+)\})?(.+)', text).groups()
     #print(palette_formatter, text, "\n")
@@ -230,7 +301,7 @@ def create_column_item(text, onclick, item_count_in_button_row):
         cmd = Config.dynamic_labels[text] = {'cmd': Config.commands[cmd_key] if cmd_key else None, 'widget': label_widget, 'label_text': text}
         return label_widget
 
-    return build_box_button(find_command(text), onclick, calculate_widget_width(item_count_in_button_row))
+    return build_box_button(find_command(text), onclick, widget_width)
 
 def apply_markup(widget, markup_name, focus_markup_name=None):
     if not markup_name in Config.palette_keys:
@@ -252,6 +323,10 @@ if __name__ == '__main__':
       footer_text = args.footer_text[0]
     else:
       footer_text = Config.FOOTER_TEXT
+    if not 'HORIZONTAL_PADDING' in Config.__dict__:
+        warn(f"""'HORIZONTAL_PADDING' not specified in your config. Defaulting to 'auto'. To remove this warning, add the following to your {config_path}:\nHORIZONTAL_PADDING = 'auto' # How much padding do you want to the left and right of your button label? Set to: 'auto' to equally distribute across the full width, 0 or False (without quotes) for a compact view without padding, or a pair of integers to define the left and right amount of padding (e.g. [5, 2] for 5 padding on the left and 2 on the right)""")
+        Config.HORIZONTAL_PADDING = 'auto'
+
     header = apply_markup(urwid.Text(header_text), 'header')
     footer = apply_markup(urwid.Text(footer_text), 'footer')
     status_widget = apply_markup(urwid.Text(''), 'status_line')
@@ -269,8 +344,29 @@ if __name__ == '__main__':
         displayed_widgets.append(header)
 
     for button_row in BUTTON_ROWS:
-        displayed_widgets.append(
-          urwid.Columns([create_column_item(text, onclick, len(button_row)) for text in button_row]))
+        columns = urwid.Columns([])
+        for index, text in enumerate(button_row):
+            label = find_command(text)
+            number_of_wide_chars = len([char for char in list(label) if unicodedata.east_asian_width(char) == 'W'])
+            col_width = (len(label) + 2 + number_of_wide_chars)
+            if Config.HORIZONTAL_PADDING == 'auto':
+                col_opts = columns.options('weight', 1)
+            else:
+                if not Config.HORIZONTAL_PADDING:
+                    Config.HORIZONTAL_PADDING = [0, 0]
+                if isinstance(Config.HORIZONTAL_PADDING, int):
+                    Config.HORIZONTAL_PADDING = [Config.HORIZONTAL_PADDING, Config.HORIZONTAL_PADDING]
+                if Config.HORIZONTAL_PADDING:
+                    borders = Borders()
+                    col_width += Config.HORIZONTAL_PADDING[0] * len(borders.middle_padding_left_character)
+                    col_width += Config.HORIZONTAL_PADDING[1] * len(borders.middle_padding_right_character)
+                col_opts = columns.options('given', col_width)
+            debug('col opts', col_opts, 'col width', col_width, 'text', text, len(text), 'label', label)
+            columns.contents.append(
+                (create_column_item(label, onclick, calculate_widget_width(index, len(button_row))), col_opts)
+            )
+        displayed_widgets.append(columns)
+
 
     if not Config.HIDE_STATUS_LINE:
         displayed_widgets.append(status_widget)
@@ -298,5 +394,5 @@ if __name__ == '__main__':
     Config.loop.run()
     if warnings:
         print("Warnings during execution:")
-        for warning in warnings:
-            print(' - ' + str(warning))
+        for warning in list(warnings):
+            print(' - ' + str('\n'.join(warning)))

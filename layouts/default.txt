@@ -4,6 +4,13 @@
 # The item keywords are matched case-insensitively on the keys from commands in the config file.
 # The first match is used. The following line will for instance add the buttons '▶ Play', '⏸ Pause', and '⏹ Stop', in that order:
 play,pause,stop
+play,pause,pause
+play,pause,stop,play
+play,pause,stop,play,pause
+play,pause,stop,play,pause,stop
+play,pause,stop,play,pause,stop,play
+play,pause,stop,play,pause,stop,play,pause
+play,pause,stop,play,pause,stop,play,pause,stop
 rewind, skip
 curl, Explore
 # Comments can be added with a # character as the first non-whitespace character of the line

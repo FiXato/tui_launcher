@@ -25,6 +25,38 @@ HIDE_HEADER = False #OPTIONAL: set this to True if you want to hide the header t
 HIDE_STATUS_LINE = False #OPTIONAL: set this to True if you want to hide the status line that for example contains the last click button
 HIDE_COMMAND_OUTPUT = False #OPTIONAL: set this to True if you don't want to output the stderr/stdout text of the commands you run
 HIDE_FOOTER = False #OPTIONAL: set this to True if you don't want to display the FOOTER_TEXT at the bottom
+HORIZONTAL_PADDING = 'auto' # How much padding do you want to the left and right of your button label? Set to: 'auto' to equally distribute across the full width, 0 or False (without quotes) for a compact view without padding, or a pair of integers to define the left and right amount of padding (e.g. [5, 2] for 5 padding on the left and 2 on the right)
+VERTICAL_PADDING = [1,1] # first number is the amount of lines to pad at the top of the button, second number is amount at the bottom
+
+BORDERS = {
+    'top_vertical_padding_character': ' ',
+    'bottom_vertical_padding_character': ' ',
+    'middle_padding_left_character': ' ',
+    'middle_padding_right_character': ' ',
+    'top_left': '┌',
+    'top_right': '┒',
+    'top_center': '─',
+    'middle_left': '│',
+    'middle_right': '│',
+    'bottom_left': '└',
+    'bottom_right': '┚',
+    'bottom_center': '─',
+}
+# Alternative set of borders, using more rounded corners:
+# BORDERS = {
+#     'top_vertical_padding_character': ' ',
+#     'bottom_vertical_padding_character': ' ',
+#     'middle_padding_left_character': ' ',
+#     'middle_padding_right_character': ' ',
+#     'top_left': '╭',
+#     'top_right': '╮',
+#     'top_center': '━',
+#     'middle_left': '│',
+#     'middle_right': '│',
+#     'bottom_left': '╰',
+#     'bottom_right': '╯',
+#     'bottom_center': '━',
+# }
 
 # A dict of a commands, where the key will be used as the label for the button, and the value is the command that will be executed when you click on it.
 # The command can be either a list of arguments, e.g.: ['curl', '--silent', '-v', '--location', 'https://site.example']
