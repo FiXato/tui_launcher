@@ -34,12 +34,12 @@ BORDERS = {
     'middle_padding_left_character': ' ',
     'middle_padding_right_character': ' ',
     'top_left': '┌',
-    'top_right': '┒',
+    'top_right': '┐',
     'top_center': '─',
     'middle_left': '│',
     'middle_right': '│',
     'bottom_left': '└',
-    'bottom_right': '┚',
+    'bottom_right': '┘',
     'bottom_center': '─',
 }
 # Alternative set of borders, using more rounded corners:
